@@ -204,7 +204,7 @@ Os manifests já referenciam `ghcr-pull`. Se o Secret não existir e as imagens 
 
 ### 5.3 Primeira instalação
 
-Os pushes na `master`/`main` precisam ter rodado ao menos uma vez para existirem as imagens `:latest`. Na pasta do DAMPCode-Base:
+Os pushes na `master`/`main` precisam ter rodado ao menos uma vez para existirem as imagens `:latest`. **Antes de aplicar, troque `dampcode.exemplo.com` pelo domínio real em `k8s/ingress.yaml`** (seção 5.4). Na pasta do DAMPCode-Base:
 
 ```bash
 kubectl apply -k k8s/
@@ -222,13 +222,37 @@ Para descobrir o endereço:
 kubectl -n dampcode get ingress dampcode
 ```
 
-Sem domínio ainda, teste com port-forward: `kubectl -n dampcode port-forward svc/dampcode-front 8080:80` e abra http://localhost:8080.
+Sem domínio ainda, teste com port-forward (o tráfego fica só entre a sua máquina e o cluster): `kubectl -n dampcode port-forward svc/dampcode-front 8080:80` e abra http://localhost:8080.
 
-### 5.4 Domínio e HTTPS (opcional)
+### 5.4 Domínio e HTTPS
 
-1. Aponte o DNS do domínio para o IP do Ingress.
-2. Instale o [cert-manager](https://cert-manager.io/docs/installation/) e crie um `ClusterIssuer` chamado `letsencrypt`.
-3. Em `k8s/ingress.yaml`, descomente `host`, `tls` e a anotação `cert-manager.io/cluster-issuer`, troque `dampcode.exemplo.com` pelo domínio e rode `kubectl apply -k k8s/`.
+O Ingress já vem com **HTTPS obrigatório**: só responde no domínio configurado e redireciona HTTP para HTTPS. Isso é proposital, porque login, senha e token passam por ele. Para funcionar:
+
+1. Troque `dampcode.exemplo.com` pelo domínio nos dois lugares de `k8s/ingress.yaml` (`tls.hosts` e `rules.host`).
+2. Aponte o DNS do domínio para o IP externo do Ingress Controller.
+3. Instale o [cert-manager](https://cert-manager.io/docs/installation/) e crie o emissor `letsencrypt` (troque o e-mail):
+
+   ```yaml
+   # cluster-issuer.yaml — kubectl apply -f cluster-issuer.yaml
+   apiVersion: cert-manager.io/v1
+   kind: ClusterIssuer
+   metadata:
+     name: letsencrypt
+   spec:
+     acme:
+       server: https://acme-v02.api.letsencrypt.org/directory
+       email: <email-do-time>
+       privateKeySecretRef:
+         name: letsencrypt
+       solvers:
+         - http01:
+             ingress:
+               ingressClassName: nginx
+   ```
+
+4. `kubectl apply -k k8s/`. Em alguns minutos o certificado aparece em `kubectl -n dampcode get certificate` com `READY True`.
+
+Enquanto o certificado não sai, o ingress-nginx responde com um certificado provisório (o navegador avisa). Não use a aplicação assim: espere o `READY True`.
 
 ### 5.5 Primeiro Admin
 
@@ -311,6 +335,8 @@ kubectl -n dampcode rollout restart deployment/dampcode-api
 | API em `CrashLoopBackOff` com `Configure Jwt:Secret...` | `jwt-secret` vazio ou curto | Recrie o Secret com 32+ caracteres e `kubectl rollout restart`. |
 | Front abre, mas toda chamada dá 502 | nginx não alcança a API | `kubectl -n dampcode get endpoints dampcode-api`; veja os logs da API. |
 | Upload de logo/foto dá 413 | Limite de tamanho do corpo | Já está em 10 MB no nginx do front e no Ingress (`proxy-body-size`). Se o Ingress Controller não for o nginx, ajuste o equivalente. |
+| Navegador avisa de certificado inválido no domínio | Certificado do Let's Encrypt ainda não emitido | `kubectl -n dampcode describe certificate dampcode-tls`; confira o DNS e o `ClusterIssuer` (seção 5.4). |
+| Ingress não responde pelo IP | O Ingress só atende o `host` configurado | Acesse pelo domínio, ou teste com `port-forward` (seção 5.3). |
 | Compose: `required variable JWT_SECRET is missing a value` | `.env` ausente ou sem `JWT_SECRET` | `cp .env.example .env` e preencha. |
 | Compose: `migrations` sai com erro e a API não sobe | Banco com senha antiga no volume | `docker compose down -v` e suba de novo (apaga os dados locais do compose). |
 | Deploy no Actions falha em "Acesso ao cluster" | `KUBE_CONFIG` ausente ou não está em base64 | Seção 6. |
