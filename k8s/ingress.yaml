@@ -1,0 +1,27 @@
+# Entrada HTTP do cluster: tudo vai para o front, que repassa /api/ para a API.
+# Requer um Ingress Controller (aqui, ingress-nginx). Para domínio próprio e HTTPS,
+# descomente "tls" e "host" e instale o cert-manager (ver docs/deploy-kubernetes.md).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dampcode
+  annotations:
+    # Logo e foto de perfil vão em data URL no corpo da requisição.
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+    # cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: nginx
+  # tls:
+  #   - hosts: [dampcode.exemplo.com]
+  #     secretName: dampcode-tls
+  rules:
+    - # host: dampcode.exemplo.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dampcode-front
+                port:
+                  name: http

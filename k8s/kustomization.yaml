@@ -1,0 +1,13 @@
+# Tudo que a DampCode precisa no cluster. Primeira instalação: kubectl apply -k k8s/
+# (o Secret dampcode-secrets é criado à parte, ver docs/deploy-kubernetes.md).
+# As migrations (migrations-job.yaml) não entram aqui: o CD da API roda o Job a cada deploy.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dampcode
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - mongo.yaml
+  - api.yaml
+  - front.yaml
+  - ingress.yaml

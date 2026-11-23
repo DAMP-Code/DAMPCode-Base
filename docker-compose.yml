@@ -1,0 +1,81 @@
+# Sobe a DampCode inteira em containers: PostgreSQL, MongoDB, migrations, API e front.
+#
+#   cp .env.example .env        # e preencha JWT_SECRET
+#   docker compose up --build   # abre em http://localhost:8080
+#
+# Por padrão constrói as imagens a partir dos repositórios clonados ao lado deste
+# (../DampCode_API e ../Damp-Code-Front). Os caminhos e as imagens podem mudar no .env.
+name: dampcode
+
+x-api-image: &api-image
+  image: ${API_IMAGE:-ghcr.io/damp-code/dampcode-api:latest}
+  build:
+    context: ${API_CONTEXT:-../DampCode_API}
+
+x-postgres-connection: &postgres-connection
+  ConnectionStrings__PostgreSql: Host=postgres;Port=5432;Database=dampcode;Username=dampcode;Password=${POSTGRES_PASSWORD:-dampcode}
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: dampcode
+      POSTGRES_USER: dampcode
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dampcode}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dampcode -d dampcode"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Aplica as migrations e termina. A API só sobe depois que ele acabar sem erro.
+  migrations:
+    <<: *api-image
+    entrypoint: ["./efbundle"]
+    environment:
+      <<: *postgres-connection
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *api-image
+    environment:
+      <<: *postgres-connection
+      ConnectionStrings__DbConnection: mongodb://mongo:27017/damp_code
+      Jwt__Secret: ${JWT_SECRET:?Defina JWT_SECRET no arquivo .env (pelo menos 32 caracteres)}
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  front:
+    image: ${FRONT_IMAGE:-ghcr.io/damp-code/damp-code-front:latest}
+    build:
+      context: ${FRONT_CONTEXT:-../Damp-Code-Front}
+    environment:
+      API_UPSTREAM: http://api:8080
+    ports:
+      - "${FRONT_PORT:-8080}:8080"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  mongo-data:
