@@ -22,6 +22,7 @@ Documento da aplicação web
 | Saber onde fica cada configuração, segredo e variável de ambiente | [Configuração e segredos](./docs/configuracao-e-segredos.md) |
 | Entender o fluxo do time: branches, commits, migrations, testes, PRs | [Processos do time](./docs/processos.md) |
 | Ver como front, API e bancos se conectam, tabelas, rotas e páginas | [Arquitetura](./docs/arquitetura.md) |
+| Rodar tudo em containers, entender o CI/CD e publicar no Kubernetes | [Docker, CI/CD e Kubernetes](./docs/deploy-kubernetes.md) |
 
 **Resumo rápido** (detalhes e solução de problemas na [instalação](./docs/instalacao.md)):
 
@@ -49,6 +50,14 @@ dotnet run --project DampCode_API --launch-profile https   # https://localhost:7
 ```
 
 Para o front usar a API real, crie `Damp-Code-Front/.env.development.local` com `VITE_USE_MOCK=false` e reinicie o Vite.
+
+Tudo em containers (só precisa de Docker; os três repositórios clonados lado a lado):
+
+```bash
+cd DAMPCode-Base
+cp .env.example .env          # preencha JWT_SECRET
+docker compose up --build     # http://localhost:8080
+```
 
 ---
 
@@ -87,6 +96,11 @@ Principais funcionalidades:
 - **PostgreSQL** (Entity Framework Core) → dados principais
 - **MongoDB** → código das entregas dos participantes
 - **xUnit** → testes automatizados
+
+**Infraestrutura**
+- **Docker** → imagens da API e do front, **Docker Compose** para rodar tudo localmente
+- **GitHub Actions** → CI (testes, build, imagens) e CD
+- **Kubernetes** → deploy com Kustomize, imagens no GitHub Container Registry
 
 **Processo**
 - **Figma** → prototipagem e design de telas  

@@ -12,12 +12,13 @@ Referência de **tudo** que a API e o front leem de configuração: o que é seg
   - [Chaves de configuração](#chaves-de-configuração)
   - [De onde a API lê (ordem de prioridade)](#de-onde-a-api-lê-ordem-de-prioridade)
   - [User Secrets (desenvolvimento)](#user-secrets-desenvolvimento)
-  - [Variáveis de ambiente (produção e CI)](#variáveis-de-ambiente-produção-e-ci)
+  - [Variáveis de ambiente (produção)](#variáveis-de-ambiente-produção)
+  - [Secrets do GitHub Actions](#secrets-do-github-actions)
   - [Portas e perfis](#portas-e-perfis)
 - [Front](#-front)
   - [Arquivos .env](#arquivos-env)
   - [O que fica no navegador](#o-que-fica-no-navegador)
-- [Valores fixos no código](#-valores-fixos-no-código)
+- [Valores padrão no código](#-valores-padrão-no-código)
 - [Trocar ou vazar um segredo](#-trocar-ou-vazar-um-segredo)
 
 ---
@@ -43,6 +44,7 @@ Referência de **tudo** que a API e o front leem de configuração: o que é seg
 | `Jwt:Issuer` | ✅ | — | `appsettings.json` | `Api` |
 | `Jwt:Audience` | ✅ | — | `appsettings.json` | `Front` |
 | `Jwt:ExpirationMinutes` | — | — | padrão no código | `1440` (24h). Aceita de 1 a 43200. |
+| `Cors:Origins` (lista) | — | — | padrão no código | `["http://localhost:5173"]` quando não configurado |
 | `ASPNETCORE_ENVIRONMENT` | — | — | `launchSettings.json` | `Development` |
 | `Logging:LogLevel:*` | — | — | `appsettings*.json` | `Information` / `Warning` para `Microsoft.AspNetCore` |
 
@@ -98,7 +100,7 @@ Gerar uma chave de JWT:
 node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 ```
 
-### Variáveis de ambiente (produção e CI)
+### Variáveis de ambiente (produção)
 
 Em variável de ambiente, o `:` vira `__` (dois sublinhados):
 
@@ -108,6 +110,7 @@ Em variável de ambiente, o `:` vira `__` (dois sublinhados):
 | `ConnectionStrings:DbConnection` | `ConnectionStrings__DbConnection` |
 | `Jwt:Secret` | `Jwt__Secret` |
 | `Jwt:ExpirationMinutes` | `Jwt__ExpirationMinutes` |
+| `Cors:Origins` | `Cors__Origins__0`, `Cors__Origins__1`... (uma por origem) |
 
 Exemplo (bash):
 
@@ -124,7 +127,18 @@ PowerShell:
 $env:Jwt__Secret = "<chave>"
 ```
 
-Hoje **não existe** pipeline de CI nem deploy configurado (nenhum dos repositórios tem `.github/workflows`). Quando existir, cadastre esses valores como *Secrets* do repositório no GitHub (Settings → Secrets and variables → Actions) e repasse como variáveis de ambiente — nunca escreva no YAML. Lembre que os testes não precisam de nenhum segredo real: o `ApiFactory` usa ambiente `Testing`, banco em memória e uma chave de JWT própria.
+Em **produção** (Docker e Kubernetes) a API recebe tudo por variável de ambiente. No compose os valores vêm do `.env` do DAMPCode-Base; no cluster, do Secret `dampcode-secrets`. Detalhes em [Docker, CI/CD e Kubernetes](./deploy-kubernetes.md).
+
+### Secrets do GitHub Actions
+
+O CI **não usa segredo nenhum** para testar: o `ApiFactory` sobe a API em ambiente `Testing`, com banco em memória e uma chave de JWT própria. A publicação no GHCR usa o `GITHUB_TOKEN` automático. Só o deploy precisa de configuração, nos dois repositórios de código:
+
+| Nome | Tipo | Conteúdo |
+|------|------|----------|
+| `KUBE_CONFIG` | Secret | kubeconfig do cluster em base64 |
+| `K8S_DEPLOY` | Variable | `true` para liberar o deploy |
+
+As senhas dos bancos e a chave do JWT de produção **não** passam pelo GitHub: ficam só no Secret do Kubernetes.
 
 ### Portas e perfis
 
@@ -155,7 +169,8 @@ Variáveis existentes:
 
 | Variável | Valores | Efeito |
 |----------|---------|--------|
-| `VITE_USE_MOCK` | `true` (padrão) / `false` | Com qualquer valor diferente de `"false"`, em `npm run dev`, o `src/mock/installMockApi.js` intercepta as chamadas para `https://localhost:7092` e responde com dados do `src/mock/seed.js`. No `npm run build` o mock nunca é instalado. |
+| `VITE_USE_MOCK` | `true` (padrão) / `false` | Com qualquer valor diferente de `"false"`, em `npm run dev`, o `src/mock/installMockApi.js` intercepta as chamadas para a API e responde com dados do `src/mock/seed.js`. No `npm run build` o mock nunca é instalado. |
+| `VITE_API_URL` | ausente (padrão) / URL / vazio | Endereço da API, lido em `src/app-components/utilities/apiUrl.js`. **Ausente**: `https://localhost:7092` (desenvolvimento). **Vazio**: chamadas relativas `/api/...` — é o que a imagem Docker usa, com o nginx repassando para a API. **URL**: API em outro domínio (aí libere esse domínio em `Cors:Origins`). |
 
 Depois de mudar um `.env`, **reinicie o Vite**.
 
@@ -168,17 +183,16 @@ Depois de mudar um `.env`, **reinicie o Vite**.
 
 ---
 
-## 📌 Valores fixos no código
+## 📌 Valores padrão no código
 
-Estes valores **não** são configuráveis hoje; mudar exige alterar o código:
+Padrões que valem quando nada é configurado:
 
-| Valor | Onde | Consequência |
-|-------|------|--------------|
-| Origem do CORS `http://localhost:5173` | `DampCode_API/Program.cs` (`AllowReact`) | O front tem que rodar exatamente nessa porta. |
-| URL da API `https://localhost:7092` | várias páginas/componentes do front (`fetch("https://localhost:7092/...")`) e `src/mock/installMockApi.js` | Para apontar o front para outra API (ex.: produção) é preciso trocar em todos os arquivos. |
-| Banco do MongoDB `damp_code` | nome dentro da connection string | Trocar a connection string troca o banco. |
-
-> Melhoria sugerida para quando houver deploy: uma variável `VITE_API_URL` no front e as origens do CORS vindas de configuração na API.
+| Valor | Onde | Como mudar |
+|-------|------|------------|
+| Origem do CORS `http://localhost:5173` | `DampCode_API/Program.cs` (`AllowReact`) | `Cors:Origins` (ou `Cors__Origins__0`...). Em desenvolvimento o front tem que rodar nessa porta. |
+| URL da API `https://localhost:7092` | `src/app-components/utilities/apiUrl.js` (todas as páginas e o mock importam `API_URL` daqui) | `VITE_API_URL` |
+| Coleção do MongoDB `SubmissionVersions` | `MongoSubmissionVersionStore.cs` | só pelo código. O **banco** (`damp_code`) vem da connection string. |
+| Porta dos containers `8080` | `Dockerfile` da API e do front | `ASPNETCORE_HTTP_PORTS` (API); no front, só pelo `nginx/default.conf.template` |
 
 ---
 

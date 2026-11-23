@@ -36,12 +36,13 @@ API (ASP.NET Core 8) ── https://localhost:7092  (e http://localhost:5062)
    └──► MongoDB    :27017  → código de cada versão das entregas
 ```
 
-Existem **dois jeitos** de rodar:
+Existem **três jeitos** de rodar:
 
 | Modo | O que precisa | Quando usar |
 |------|---------------|-------------|
 | **A. Só o front, com mock** | Git + Node.js | Mexer em tela/visual. O front simula a API no navegador (`VITE_USE_MOCK=true`, padrão). Leva uns 5 minutos. |
-| **B. Completo** | Tudo da seção 2 | Mexer na API, testar integração de verdade, migrations. |
+| **B. Completo** | Tudo da seção 2 | Mexer na API, testar integração de verdade, migrations. É o modo deste guia. |
+| **C. Tudo em containers** | Git + Docker Desktop | Ver o sistema inteiro rodando "como em produção" sem instalar .NET nem bancos: `docker compose up --build` no DAMPCode-Base. Ver [Docker, CI/CD e Kubernetes](./deploy-kubernetes.md#3-rodar-tudo-com-docker-compose). Não serve para desenvolver (precisa reconstruir a cada mudança). |
 
 Se for só o modo A, faça as seções [2](#2-pré-requisitos) (Git e Node), [3](#3-clonar-os-repositórios) e [8](#8-rodar-o-front).
 

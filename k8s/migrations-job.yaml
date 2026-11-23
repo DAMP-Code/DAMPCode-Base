@@ -1,0 +1,28 @@
+# Aplica as migrations do PostgreSQL com o efbundle que vem dentro da imagem da API.
+# O CD da API apaga o Job anterior, troca a tag :latest pelo SHA, aplica e espera terminar antes de atualizar a API.
+# Manual: kubectl -n dampcode delete job dampcode-migrations --ignore-not-found && kubectl -n dampcode apply -f k8s/migrations-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dampcode-migrations
+  namespace: dampcode
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: migrations
+          image: ghcr.io/damp-code/dampcode-api:latest
+          command: ["./efbundle"]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dampcode-secrets
+                  key: postgres-password
+            - name: ConnectionStrings__PostgreSql
+              value: Host=postgres;Port=5432;Database=dampcode;Username=dampcode;Password=$(POSTGRES_PASSWORD)

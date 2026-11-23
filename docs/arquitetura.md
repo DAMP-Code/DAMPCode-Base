@@ -32,6 +32,7 @@ flowchart LR
 - A **API** é REST, organizada em Controllers → Services → `DampCodeDbContext`. Regras de negócio ficam nos Services.
 - O **PostgreSQL** guarda tudo que é estruturado (contas, empresas, Hackathons, equipes, inscrições, entregas, avaliações, módulos).
 - O **MongoDB** guarda só o texto do código de cada versão de entrega; o PostgreSQL guarda a lista de versões e aponta para o documento no Mongo.
+- O diagrama acima é o **desenvolvimento**. Em **produção** (Docker/Kubernetes) o front é servido por um nginx que repassa `/api/` para a API no mesmo domínio, e as migrations rodam num Job antes de cada deploy. Ver [Docker, CI/CD e Kubernetes](./deploy-kubernetes.md#1-visão-do-fluxo).
 
 ---
 
@@ -49,6 +50,7 @@ flowchart LR
 | Documentação | Swagger (Swashbuckle 6.6) |
 | Testes | xUnit 2.9 + `Microsoft.AspNetCore.Mvc.Testing` 10 + EF Core InMemory (`net10.0`) |
 | Ferramenta de migrations | `dotnet-ef` 8.0.11 (local, `dotnet-tools.json`) |
+| Container | `mcr.microsoft.com/dotnet/aspnet:8.0`, porta 8080, com `efbundle` |
 
 ### Front (`Damp-Code-Front`)
 
@@ -64,6 +66,16 @@ flowchart LR
 | Ícones | Font Awesome, Lucide, Tabler |
 | PDF | jsPDF + jspdf-autotable |
 | Lint | ESLint 9 |
+| Container | build em `node:22-alpine`, servido por `nginxinc/nginx-unprivileged`, porta 8080 |
+
+### Infraestrutura
+
+| Item | Onde |
+|------|------|
+| Imagens | GitHub Container Registry (`ghcr.io/damp-code/dampcode-api`, `ghcr.io/damp-code/damp-code-front`) |
+| CI/CD | GitHub Actions (`.github/workflows/ci-cd.yml` em cada repositório de código) |
+| Orquestração | Kubernetes com Kustomize (`DAMPCode-Base/k8s/`), Ingress nginx |
+| Local em containers | Docker Compose (`DAMPCode-Base/docker-compose.yml`) |
 
 Atalho de importação: `@/` aponta para `src/` (`vite.config.js` e `jsconfig.json`).
 
@@ -75,6 +87,8 @@ Atalho de importação: `@/` aponta para `src/` (`vite.config.js` e `jsconfig.js
 DampCode_API/
 ├── DampCode_API.slnx
 ├── dotnet-tools.json              # dotnet-ef fixado
+├── Dockerfile                     # imagem da API + efbundle
+├── .github/workflows/ci-cd.yml    # testes → imagem → migrations + deploy
 ├── docs/superpowers/
 │   ├── specs/                     # design de cada funcionalidade
 │   └── plans/                     # plano de implementação
@@ -103,6 +117,9 @@ DampCode_API/
 ```
 Damp-Code-Front/
 ├── .env.development               # VITE_USE_MOCK=true
+├── Dockerfile                     # build do Vite + nginx
+├── nginx/default.conf.template    # SPA + repasse de /api/ para a API
+├── .github/workflows/ci-cd.yml    # build/lint → imagem → deploy
 ├── index.html
 ├── vite.config.js
 ├── public/favicon.svg
@@ -115,7 +132,7 @@ Damp-Code-Front/
     │   ├── company/               # painel, criação, entregas, avaliação, módulos, gráficos
     │   └── participant/           # painel e perfil
     ├── app-components/            # componentes por área (home, hackathon-page, charts, auth...)
-    │   └── utilities/             # AuthContext, RequireRole, RequireGuest, helpers
+    │   └── utilities/             # AuthContext, RequireRole, RequireGuest, apiUrl.js, helpers
     ├── components/ui/             # componentes shadcn
     ├── mock/                      # installMockApi.js + seed.js
     ├── data/

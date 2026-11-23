@@ -77,7 +77,10 @@ código + testes + migration (se mexer no banco) + mock (se o front consumir rot
 verificações da seção 8
    │
    ▼
-push + PR (um por repositório) ──► revisão ──► merge na branch principal
+push + PR (um por repositório) ──► CI verde + revisão ──► merge na branch principal
+                                                              │
+                                                              ▼
+                                         imagem no GHCR ──► deploy no Kubernetes (se ligado)
 ```
 
 Funcionalidades que mexem em API e front andam **juntas**: mesma branch com o mesmo nome nos dois repositórios e um PR em cada um, citando o outro.
@@ -163,6 +166,7 @@ Regras:
 - **Nunca** edite uma migration que já está em `master`: crie outra corrigindo.
 - Desfazer a última migration **antes** do push: `dotnet ef migrations remove --project DampCode_API --startup-project DampCode_API` (se já aplicou, rode antes `dotnet ef database update <MigrationAnterior> ...`).
 - Mantenha compatível com PostgreSQL 13+.
+- Em produção as migrations rodam **sozinhas** a cada deploy da API (Job `dampcode-migrations`, antes de trocar as versões). Por isso, prefira migrations que a versão anterior da API também aguente (adicionar tabela/coluna anulável); remover ou renomear coluna fica para um deploy seguinte.
 - Nomes de tabela e coluna seguem `snake_case` (configurado em `Data/Configurations`).
 
 ### Recriar o banco local do zero
@@ -190,6 +194,12 @@ dotnet test DampCode_API.Tests
 - Todos os testes precisam passar. Eles não usam PostgreSQL nem MongoDB: `ApiFactory` sobe a API em ambiente `Testing` com EF Core InMemory e `InMemorySubmissionVersionStore`.
 - Funcionalidade nova vem com teste de serviço (`*ServiceTests.cs`) e, quando cria rota, teste de endpoint (`*EndpointTests.cs`).
 - O banco em memória **não** aplica índices únicos, check constraints nem transações: regra que depende disso precisa ser conferida também no PostgreSQL local.
+
+### CI no GitHub
+
+Todo PR roda o workflow **CI/CD** nos dois repositórios (testes da API, build/lint do front e o build das imagens Docker). O PR só deve ser mesclado com o CI verde. Depois do merge na `master`/`main`, o mesmo workflow publica as imagens no GHCR e, se estiver ligado, faz o deploy no Kubernetes. Detalhes em [Docker, CI/CD e Kubernetes](./deploy-kubernetes.md#4-cicd-no-github-actions).
+
+Mexeu em `Dockerfile`, `nginx/` ou em configuração lida pela API? Rode a stack completa antes do PR: `docker compose up --build` no DAMPCode-Base.
 
 ### Front
 
@@ -244,8 +254,8 @@ O papel vem dentro do token: depois de mudar o tipo de uma conta no banco, é pr
 
 Registradas para ninguém estranhar:
 
-- O front tem a URL da API (`https://localhost:7092`) fixa em vários arquivos e a API libera só `http://localhost:5173` no CORS (ver [Configuração e segredos](./configuracao-e-segredos.md#-valores-fixos-no-código)).
-- Não há CI nem deploy automatizado.
+- O deploy no Kubernetes está pronto, mas desligado até existir um cluster (`K8S_DEPLOY` e `KUBE_CONFIG`, ver [Docker, CI/CD e Kubernetes](./deploy-kubernetes.md#6-ligar-o-deploy-automático)).
+- O lint do front ainda tem erros antigos, por isso não bloqueia o CI.
 - O e-mail oficial nos Termos e na Política de Privacidade ainda é placeholder (`src/app-components/legal/contato.js` no front).
 - O `README.md` do front ainda é a cópia antiga do documento acadêmico; a documentação atual é a deste repositório.
 - O `DampCode_API.http` ainda tem o exemplo `weatherforecast` do template; use o Swagger para testar rotas.
